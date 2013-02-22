@@ -97,10 +97,10 @@
 (defn- create-pdf-handler
   [os]
   (create-dom-handler os (fn [dom]
-                        (let [renderer (ITextRenderer.)]
-                        (.setDocument renderer dom "")
-                        (.layout renderer)
-                        (.createPDF renderer os)))))
+                           (let [renderer (ITextRenderer.)]
+                             (.setDocument renderer dom "")
+                             (.layout renderer)
+                             (.createPDF renderer os)))))
 
 (defn- create-infoset-handler
   "Get a ContentHandler for streaming SAX events as Fast Infoset to the
@@ -143,7 +143,23 @@
   since ltime. Throws exceptions if the file does not exist or is in a
   format that cannot be parsed."
   [url ltime]
-  nil)
+  (let [conn (.openConnection url)]
+    (if (not (nil? ltime))
+      (.setIfModifiedSince conn ltime))
+    (case (.getResponseCode conn)
+      304 nil
+      ;; TODO should handle additional response codes
+      (let [ctype (.replaceFirst (.getContentType conn) ";.*" "")
+            reader (case ctype
+                     "text/html" (get-html-reader)
+                     "application/xml" (get-xml-reader)
+                     "text/xml" (get-xml-reader)
+                     (throw (Exception. 
+                              (str "Unsupported content type" ctype))))
+            is (InputSource. (.getInputStream conn))
+            mtime (.getLastModified conn)]
+        (.setSystemId is (str url))
+        (Resource. reader is mtime)))))
 
 (defn- get-resource 
   "Get the resource identified by systemId or nil if it has not been updated
