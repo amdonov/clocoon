@@ -275,7 +275,7 @@
       (apply parser (handler os) filters))
     file))
 
-(def ^{:private true} pipeline-cache (atom {}))
+(def ^{:private true} pipeline-cache (atom io/cache))
 
 (defn- cached-filter-valid? [ctime f]
   (if (satisfies? CachedFilter f)
@@ -302,7 +302,10 @@
         (do 
           (if (not (nil? f))
             (.delete f))
-          (assoc cache cacheId (do-pipeline systemId handler-factory filters)))
+          (let [file (do-pipeline systemId handler-factory filters)]
+            (.write io/journal (str cacheId "||" file "\n"))
+            (.flush io/journal)
+            (assoc cache cacheId file)))
         cache))))
 
 (defn pipeline [systemId handler-factory & filters]

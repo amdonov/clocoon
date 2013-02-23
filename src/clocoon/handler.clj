@@ -6,7 +6,7 @@
             [compojure.route :as route]
             [clocoon.sax :as sax]))
 
-(def html-transform (sax/get-xsl-filter "sample/xsl/html.xsl"))
+(def html-transform (sax/get-xsl-filter "sample/sample.xsl"))
 
 (defn- basic-html [source f]
   (sax/pipeline source sax/stream-handler (html-transform {"format" f})))
