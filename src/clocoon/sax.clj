@@ -31,42 +31,16 @@
     (.setParent f reader)
     f))
 
-(defrecord CachedResource [data mtime])
-
-(def ^{:private true} resource-cache (atom {}))
-
-(defn- with-infoset-cache [cache systemId]
-  (let [r (cache systemId)]
-    (let [ltime (if (nil? r) nil (:mtime r))]
-      (let [resource (source/get-source systemId ltime)]
-        (if (nil? resource) 
-          cache
-          (let [{:keys [reader inputSource mtime]} resource 
-                bos (ByteArrayOutputStream.)]
-            (.setContentHandler reader (ser/create-infoset-serializer bos))
-            (.parse reader inputSource)
-            (info "Caching infoset copy of" systemId)
-            (assoc cache systemId (CachedResource. 
-                                    (.toByteArray bos) mtime))))))))
-
-(defn- get-cached-resource [systemId]
-  (swap! resource-cache with-infoset-cache systemId)
-  (let [r (@resource-cache systemId)]
-    (let [is (InputSource. (ByteArrayInputStream. (:data r)))]
-      (.setSystemId is systemId)
-      (Source. 
-        (source/get-reader "application/fastinfoset") is (:mtime r)))))
-
 (defn get-parser
   [systemId]
-  (let [{:keys [reader inputSource]} (get-cached-resource systemId)]
+  (let [{:keys [reader inputSource]} (source/get systemId)]
     (fn [contentHandler & filters]
       (let [reader (reduce wrap-reader reader filters)]
         (.setContentHandler reader contentHandler)
         (.parse reader inputSource)))))
 
 (defn get-source [systemId]
-  (let [{:keys [reader inputSource mtime]} (get-cached-resource systemId)]
+  (let [{:keys [reader inputSource mtime]} (source/get systemId)]
     {:source (SAXSource. reader inputSource)
      :mtime mtime}))
 
@@ -92,7 +66,7 @@
                    (max (var-get ctime) (:mtime source)))))))
 
 (defn- cached-resource-valid? [ctime systemId]
-  (let [mtime (:mtime (get-cached-resource systemId))]
+  (let [mtime (:mtime (source/get systemId))]
     (<= mtime ctime)))
 
 (defn- cached-template-valid? [template]
