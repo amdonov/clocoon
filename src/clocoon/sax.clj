@@ -1,7 +1,9 @@
 (ns clocoon.sax
   (:use [clojure.tools.logging :only (info error)])
-  (:require [clocoon.io :as io])
-  (:import (javax.xml.transform TransformerFactory URIResolver)
+  (:require [clocoon.io :as io]
+            [clocoon.source :as source])
+  (:import (clocoon.source Source)
+           (javax.xml.transform TransformerFactory URIResolver)
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
            (javax.xml.transform.stream StreamResult)
            (javax.xml.transform.dom DOMResult)
@@ -28,26 +30,6 @@
   (cache-valid? [this ctime]
     (> ctime mtime)))
 
-(defn- get-xml-reader
-  "Get a new XMLReader suitable for parsing XML"
-  []
-  (XMLReaderFactory/createXMLReader))
-
-(defn- get-html-reader 
-  "Get a new XMLReader suitable for parsing HTML"
-  []
-  (let [parser (SAXParser.)]
-    (.setFeature parser 
-                 "http://cyberneko.org/html/features/insert-namespaces" true)
-    (.setProperty parser 
-                  "http://cyberneko.org/html/properties/names/elems" "lower")
-    parser))
-
-(defn- get-infoset-reader 
-  "Get a new XMLReader suitable for parsing Fast Infoset" 
-  []
-  (SAXDocumentParser.))
-
 (defn- wrap-reader 
   "Wrap an XMLReader with an XMLFilter"
   [reader xmlfilter]
@@ -67,7 +49,10 @@
     handler))
 
 (defn create-dom-handler
-  [os callback]
+  "A helper method for handlers that cannot directly deal with SAX
+  events and must have access to the completed DOM. It builds up the 
+  DOM and passes it to the provided callback"
+  [callback]
   (let [handler (.. (SAXTransformerFactory/newInstance)
                   (newTransformerHandler))
         result (DOMResult.)
@@ -96,11 +81,11 @@
 
 (defn- create-pdf-handler
   [os]
-  (create-dom-handler os (fn [dom]
-                           (let [renderer (ITextRenderer.)]
-                             (.setDocument renderer dom "")
-                             (.layout renderer)
-                             (.createPDF renderer os)))))
+  (create-dom-handler (fn [dom]
+                        (let [renderer (ITextRenderer.)]
+                          (.setDocument renderer dom "")
+                          (.layout renderer)
+                          (.createPDF renderer os)))))
 
 (defn- create-infoset-handler
   "Get a ContentHandler for streaming SAX events as Fast Infoset to the
@@ -116,60 +101,6 @@
 
 (def stream-handler (HandlerFactory. create-stream-handler ""))
 
-(defrecord Resource [reader inputSource mtime])
-
-(defn- get-file-resource
-  "Get a file resource located at path or nil if it has not been updated
-  since ltime. Throws exceptions if the file does not exist or is in a
-  format that cannot be parsed."
-  [path ltime]
-  (let [f (File. path)]
-    (if (and (.exists f) (.isFile f))
-      (let [mtime (.lastModified f)]
-        (if (or (nil? ltime) (> mtime ltime)) 
-          ; Either ltime is nil or the file has changed
-          (let [reader
-                (case (io/get-content-type (.toPath f))
-                  "text/html" (get-html-reader)
-                  "application/xml" (get-xml-reader) 
-                  (throw (Exception. "Unsupported file format")))]
-            (Resource. reader (InputSource. path) mtime))
-          ; Hasn't changed since ltime
-          nil))
-      (throw (Exception. "Not a file")))))
-
-(defn- get-url-resource
-  "Get a url resource located at url or nil if it has not been updated
-  since ltime. Throws exceptions if the file does not exist or is in a
-  format that cannot be parsed."
-  [url ltime]
-  (let [conn (.openConnection url)]
-    (if (not (nil? ltime))
-      (.setIfModifiedSince conn ltime))
-    (case (.getResponseCode conn)
-      304 nil
-      ;; TODO should handle additional response codes
-      (let [ctype (.replaceFirst (.getContentType conn) ";.*" "")
-            reader (case ctype
-                     "text/html" (get-html-reader)
-                     "application/xml" (get-xml-reader)
-                     "text/xml" (get-xml-reader)
-                     (throw (Exception. 
-                              (str "Unsupported content type" ctype))))
-            is (InputSource. (.getInputStream conn))
-            mtime (.getLastModified conn)]
-        (.setSystemId is (str url))
-        (Resource. reader is mtime)))))
-
-(defn- get-resource 
-  "Get the resource identified by systemId or nil if it has not been updated
-  since ltime where ltime is milliseconds since the epoch"
-  [systemId ltime]
-  (let [url (io/get-url systemId)]
-    (case (.getProtocol url)
-      "file" (get-file-resource (.getPath url) ltime)
-      (get-url-resource url ltime))))
-
 (defrecord CachedResource [data mtime])
 
 (def ^{:private true} resource-cache (atom {}))
@@ -177,7 +108,7 @@
 (defn- with-infoset-cache [cache systemId]
   (let [r (cache systemId)]
     (let [ltime (if (nil? r) nil (:mtime r))]
-      (let [resource (get-resource systemId ltime)]
+      (let [resource (source/get-source systemId ltime)]
         (if (nil? resource) 
           cache
           (let [{:keys [reader inputSource mtime]} resource 
@@ -193,7 +124,8 @@
   (let [r (@resource-cache systemId)]
     (let [is (InputSource. (ByteArrayInputStream. (:data r)))]
       (.setSystemId is systemId)
-      (Resource. (get-infoset-reader) is (:mtime r)))))
+      (Source. 
+        (source/get-reader "application/fastinfoset") is (:mtime r)))))
 
 (defn get-parser
   [systemId]
