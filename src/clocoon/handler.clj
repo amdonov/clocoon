@@ -5,19 +5,18 @@
   (:require [compojure.handler :as handler]
             [compojure.route :as route]
             [clocoon.sax :as sax]
-            [clocoon.serialize :as ser]))
+            [clocoon.serialize :as serialize]))
 
 (def html-transform (sax/get-xsl-filter "sample/sample.xsl"))
 
 (defn- basic-html [source f]
-  (sax/pipeline source ser/stream-serializer 
-                (html-transform {"format" f})))
+  (sax/pipeline source serialize/stream (html-transform {"format" f})))
 
 (defn- just-xml [source]
-  (sax/pipeline source ser/stream-serializer))
+  (sax/pipeline source serialize/stream))
 
 (defn- basic-pdf [source f]
-  (sax/pipeline source ser/pdf-serializer (html-transform {"format" f})))
+  (sax/pipeline source serialize/pdf (html-transform {"format" f})))
 
 (defn- source [src]
   (str "sample/" src ".xml"))

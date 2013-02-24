@@ -1,7 +1,6 @@
 (ns clocoon.sax
   (:use [clojure.tools.logging :only (info error)])
   (:require [clocoon.io :as io]
-            [clocoon.serialize :as ser]
             [clocoon.source :as source])
   (:import (clocoon.source Source)
            (javax.xml.transform TransformerFactory URIResolver)

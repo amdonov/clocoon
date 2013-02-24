@@ -8,7 +8,7 @@
 
 (defrecord Serializer [constructor cacheId])
 
-(defn create-stream-serializer
+(defn- create-stream-serializer
   "Get a ContentHandler for streaming SAX events as XML/HTML/text 
   content to the provided OutputStream"
   [os]
@@ -17,7 +17,7 @@
     (.setResult serializer (StreamResult. os))
     serializer))
 
-(defn create-dom-serializer
+(defn- create-dom-serializer
   "A helper method for serializers that cannot directly deal with SAX
   events and must have access to the completed DOM. It builds up the 
   DOM and passes it to the provided callback"
@@ -48,7 +48,7 @@
     (.setResult serializer result)
     proxy))
 
-(defn create-pdf-serializer
+(defn- create-pdf-serializer
   "Create a serializer that uses XHTMLRender to produce a PDF from XHTML"
   [os]
   (create-dom-serializer (fn [dom]
@@ -57,7 +57,7 @@
                              (.layout renderer)
                              (.createPDF renderer os)))))
 
-(defn create-infoset-serializer
+(defn- create-infoset-serializer
   "Get a ContentHandler for streaming SAX events as Fast Infoset to the
   provided OutputStream"
   [os]
@@ -65,8 +65,8 @@
     (.setOutputStream serializer os)
     serializer))
 
-(def infoset-serializer (Serializer. create-infoset-serializer "fis"))
+(def infoset (Serializer. create-infoset-serializer "fis"))
 
-(def pdf-serializer (Serializer. create-pdf-serializer "pdf"))
+(def pdf (Serializer. create-pdf-serializer "pdf"))
 
-(def stream-serializer (Serializer. create-stream-serializer ""))
+(def stream (Serializer. create-stream-serializer ""))

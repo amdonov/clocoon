@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [get])
   (:use [clojure.tools.logging :only (info)])
   (:require [clocoon.io :as io]
-            [clocoon.serialize :as ser])
+            [clocoon.serialize :as serialize])
   (:import (com.sun.xml.fastinfoset.sax SAXDocumentParser)
            (java.io ByteArrayInputStream ByteArrayOutputStream File)
            (org.cyberneko.html.parsers SAXParser)
@@ -99,7 +99,7 @@
       cache
       (let [{:keys [reader inputSource mtime]} resource
             bos (ByteArrayOutputStream.)]
-        (.setContentHandler reader (ser/create-infoset-serializer bos))
+        (.setContentHandler reader ((:constructor serialize/infoset) bos))
         (.parse reader inputSource)
         (info "Caching infoset copy of" systemId)
         (assoc cache systemId (CachedSource. (.toByteArray bos) mtime))))))
