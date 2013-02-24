@@ -1,27 +1,19 @@
 (ns clocoon.sax
   (:use [clojure.tools.logging :only (info error)])
   (:require [clocoon.io :as io]
+            [clocoon.serialize :as ser]
             [clocoon.source :as source])
   (:import (clocoon.source Source)
            (javax.xml.transform TransformerFactory URIResolver)
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
-           (javax.xml.transform.stream StreamResult)
-           (javax.xml.transform.dom DOMResult)
-           (org.xml.sax InputSource ContentHandler)
+           (org.xml.sax InputSource)
            (java.io File ByteArrayInputStream BufferedOutputStream
                     FileOutputStream ByteArrayOutputStream)
-           (java.net URI)
-           (org.xhtmlrenderer.pdf ITextRenderer)
-           (org.xml.sax.helpers XMLReaderFactory)
-           (org.cyberneko.html.parsers SAXParser)
-           (com.sun.xml.fastinfoset.sax SAXDocumentParser 
-                                        SAXDocumentSerializer)))
+           (java.net URI)))
 
 (defprotocol CachedFilter
   (cache-valid? [this ctime])
   (cache-id [this]))
-
-(defrecord HandlerFactory [constructor cacheId])
 
 (defrecord XSLFilter [xmlfilter mtime cacheId]
   CachedFilter
@@ -39,68 +31,6 @@
     (.setParent f reader)
     f))
 
-(defn- create-stream-handler
-  "Get a ContentHandler for streaming SAX events as XML/HTML/text content to the
-  provided OutputStream"
-  [os]
-  (let [handler (.. (SAXTransformerFactory/newInstance) 
-                  (newTransformerHandler))]
-    (.setResult handler (StreamResult. os))
-    handler))
-
-(defn create-dom-handler
-  "A helper method for handlers that cannot directly deal with SAX
-  events and must have access to the completed DOM. It builds up the 
-  DOM and passes it to the provided callback"
-  [callback]
-  (let [handler (.. (SAXTransformerFactory/newInstance)
-                  (newTransformerHandler))
-        result (DOMResult.)
-        proxy (reify ContentHandler 
-                (characters [this ch start length]
-                  (.characters handler ch start length))
-                (endElement [this uri localName qName]
-                  (.endElement handler uri localName qName))
-                (endPrefixMapping [this prefix]
-                  (.endPrefixMapping handler prefix))
-                (processingInstruction [this target data]
-                  (.processingInstruction handler target data))
-                (setDocumentLocator [this locator]
-                  (.setDocumentLocator handler locator))
-                (skippedEntity [this name]
-                  (.skippedEntity handler name))
-                (startDocument [this]
-                  (.startDocument handler))
-                (startElement [this uri localName qName atts]
-                  (.startElement handler uri localName qName atts))
-                (endDocument [this]
-                  (.endDocument handler)
-                  (callback (.getNode result))))]
-    (.setResult handler result)
-    proxy))
-
-(defn- create-pdf-handler
-  [os]
-  (create-dom-handler (fn [dom]
-                        (let [renderer (ITextRenderer.)]
-                          (.setDocument renderer dom "")
-                          (.layout renderer)
-                          (.createPDF renderer os)))))
-
-(defn- create-infoset-handler
-  "Get a ContentHandler for streaming SAX events as Fast Infoset to the
-  provided OutputStream"
-  [os]
-  (let [handler (SAXDocumentSerializer.)]
-    (.setOutputStream handler os)
-    handler))
-
-(def infoset-handler (HandlerFactory. create-infoset-handler "fis"))
-
-(def pdf-handler (HandlerFactory. create-pdf-handler "pdf"))
-
-(def stream-handler (HandlerFactory. create-stream-handler ""))
-
 (defrecord CachedResource [data mtime])
 
 (def ^{:private true} resource-cache (atom {}))
@@ -113,7 +43,7 @@
           cache
           (let [{:keys [reader inputSource mtime]} resource 
                 bos (ByteArrayOutputStream.)]
-            (.setContentHandler reader (create-infoset-handler bos))
+            (.setContentHandler reader (ser/create-infoset-serializer bos))
             (.parse reader inputSource)
             (info "Caching infoset copy of" systemId)
             (assoc cache systemId (CachedResource. 
@@ -199,12 +129,12 @@
     ([params]
      (get-xsl-filter-internal systemId params))))
 
-(defn- do-pipeline [systemId handler-factory filters]
+(defn- do-pipeline [systemId serializer-factory filters]
   (let [parser (get-parser systemId)
         file (io/make-cache-file)
-        handler (:constructor handler-factory) ]
+        serializer (:constructor serializer-factory) ]
     (with-open [os (BufferedOutputStream. (FileOutputStream. file))]
-      (apply parser (handler os) filters))
+      (apply parser (serializer os) filters))
     file))
 
 (def ^{:private true} pipeline-cache (atom io/cache))
@@ -219,11 +149,11 @@
     (cached-resource-valid? ctime systemId)
     (every? (partial cached-filter-valid? ctime) filters)))
 
-(defn- get-pipeline-cache-id [systemId handler-factory filters]
-  (str systemId (:cacheId handler-factory) (reduce str (map :cacheId (filter (partial satisfies? CachedFilter) filters)))))
+(defn- get-pipeline-cache-id [systemId serializer-factory filters]
+  (str systemId (:cacheId serializer-factory) (reduce str (map :cacheId (filter (partial satisfies? CachedFilter) filters)))))
 
-(defn- with-pipeline-cache [cache systemId handler-factory filters]
-  (let [cacheId (get-pipeline-cache-id systemId handler-factory filters)]
+(defn- with-pipeline-cache [cache systemId serializer-factory filters]
+  (let [cacheId (get-pipeline-cache-id systemId serializer-factory filters)]
     (let [f (cache cacheId)]
       (if (or (nil? f)
               (not (.exists f))
@@ -234,12 +164,12 @@
         (do 
           (if (not (nil? f))
             (.delete f))
-          (let [file (do-pipeline systemId handler-factory filters)]
+          (let [file (do-pipeline systemId serializer-factory filters)]
             (.write io/journal (str cacheId "||" file "\n"))
             (.flush io/journal)
             (assoc cache cacheId file)))
         cache))))
 
-(defn pipeline [systemId handler-factory & filters]
-  (swap! pipeline-cache with-pipeline-cache systemId handler-factory filters)
-  (@pipeline-cache (get-pipeline-cache-id systemId handler-factory filters)))
+(defn pipeline [systemId serializer-factory & filters]
+  (swap! pipeline-cache with-pipeline-cache systemId serializer-factory filters)
+  (@pipeline-cache (get-pipeline-cache-id systemId serializer-factory filters)))
