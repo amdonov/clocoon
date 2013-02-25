@@ -2,42 +2,10 @@
   (:refer-clojure :exclude [get])
   (:use [clojure.tools.logging :only (info)])
   (:require [clocoon.io :as io]
+            [clocoon.reader :as reader]
             [clocoon.serialize :as serialize])
-  (:import (com.sun.xml.fastinfoset.sax SAXDocumentParser)
-           (java.io ByteArrayInputStream ByteArrayOutputStream File)
-           (org.cyberneko.html.parsers SAXParser)
-           (org.xml.sax InputSource)
-           (org.xml.sax.helpers XMLReaderFactory))) 
-
-(defn- get-xml-reader
-  "Get a new XMLReader suitable for parsing XML"
-  []
-  (XMLReaderFactory/createXMLReader))
-
-(defn- get-html-reader 
-  "Get a new XMLReader suitable for parsing HTML"
-  []
-  (let [parser (SAXParser.)]
-    (.setFeature parser 
-                 "http://cyberneko.org/html/features/insert-namespaces" true)
-    (.setProperty parser 
-                  "http://cyberneko.org/html/properties/names/elems" "lower")
-    parser))
-
-(defn- get-infoset-reader 
-  "Get a new XMLReader suitable for parsing Fast Infoset" 
-  []
-  (SAXDocumentParser.))
-
-(defn- get-reader
-  "Returns an XMLReader that's suitable for for the provided content type."
-  [ctype]
-  (case ctype
-    "text/html" (get-html-reader)
-    "application/xml" (get-xml-reader)
-    "text/xml" (get-xml-reader)
-    "application/fastinfoset" (get-infoset-reader)
-    throw (Exception. (str "Unsupported content type" ctype))))
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream File)
+           (org.xml.sax InputSource)))
 
 (defrecord Source 
   [reader inputSource mtime])
@@ -55,7 +23,7 @@
       (let [mtime (.lastModified f)]
         (if (or (nil? ltime) (> mtime ltime)) 
           ; Either ltime is nil or the file has changed
-          (let [reader (get-reader (io/get-content-type (.toPath f)))]
+          (let [reader (reader/get (io/get-content-type (.toPath f)))]
             (Source. reader (InputSource. path) mtime))
           ; Hasn't changed since ltime
           nil))
@@ -72,7 +40,7 @@
       304 nil
       ;; TODO should handle additional response codes
       (let [ctype (.replaceFirst (.getContentType conn) ";.*" "")
-            reader (get-reader ctype)
+            reader (reader/get ctype)
             ;; It's OK to do this. The stream will be closed by the
             ;; reader as part of end-of-parse cleanup.
             is (InputSource. (.getInputStream conn))
@@ -115,5 +83,5 @@
       (let [r (@source-cache systemId)
             is (InputSource. (ByteArrayInputStream. (:data r)))]
         (.setSystemId is systemId)
-        (Source. (get-infoset-reader) is (:ctime r))))
+        (Source. (reader/get "application/fastinfoset") is (:ctime r))))
     (get-source systemId nil)))
