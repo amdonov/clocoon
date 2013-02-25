@@ -1,4 +1,5 @@
 (ns clocoon.filter.xsl
+  (:refer-clojure :exclude [filter])
   (:use [clojure.tools.logging :only (info error)]
         [clocoon.filter.core])
   (:require [clocoon.source :as source])
