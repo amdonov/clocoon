@@ -1,87 +1,102 @@
 (ns clocoon.source
-  (:refer-clojure :exclude [get])
+  (:refer-clojure :exclude [resolve])
   (:use [clojure.tools.logging :only (info)])
-  (:require [clocoon.io :as io]
-            [clocoon.reader :as reader]
-            [clocoon.serialize :as serialize])
+  (:require [clocoon.reader :as reader])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream File)
+           (java.net URL)
+           (java.nio.file Files)
            (org.xml.sax InputSource)))
 
-(defrecord Source 
+(defrecord Source
   [reader inputSource mtime])
 
 (defrecord CachedSource
   [data ctime])
 
-(defn- get-file-source
-  "Get a file source located at path or nil if it has not been updated
-  since ltime. Throws exceptions if the file does not exist or is in a
-  format that cannot be parsed."
-  [path ltime]
-  (let [f (File. path)]
-    (if (and (.exists f) (.isFile f))
-      (let [mtime (.lastModified f)]
-        (if (or (nil? ltime) (> mtime ltime)) 
-          ; Either ltime is nil or the file has changed
-          (let [reader (reader/get (io/get-content-type (.toPath f)))]
-            (Source. reader (InputSource. path) mtime))
-          ; Hasn't changed since ltime
-          nil))
-      (throw (Exception. "Not a file")))))
+(defprotocol Resource
+  (modified? [this mtime])
+  (fetch [this] [this mtime]))
 
-(defn- get-url-source
-  "Get a url source located at url or nil if it has not been updated
-  since ltime."
-  [url ltime]
-  (let [conn (.openConnection url)]
-    (if (not (nil? ltime))
-      (.setIfModifiedSince conn ltime))
-    (case (.getResponseCode conn)
-      304 nil
-      ;; TODO should handle additional response codes
-      (let [ctype (.replaceFirst (.getContentType conn) ";.*" "")
-            reader (reader/get ctype)
-            ;; It's OK to do this. The stream will be closed by the
-            ;; reader as part of end-of-parse cleanup.
-            is (InputSource. (.getInputStream conn))
-            mtime (.getLastModified conn)]
-        (.setSystemId is (str url))
-        (Source. reader is mtime)))))
+(defrecord CachedResource
+  [resource]
+  Resource
+  (modified? [this mtime]
+    (println "Using Cache")
+    (modified? (:resource this) mtime))
+  (fetch [this]
+    (println "Using Cache")
+    (fetch (:resource this)))
+  (fetch [this mtime]
+    (println "Using Cache")
+    (fetch (:resource this) mtime)))
 
-(defn- get-source
-  "Get the source identified by systemId or nil if it has not been updated
-  since ltime where ltime is milliseconds since the epoch"
-  [systemId ltime]
-  (let [url (io/get-url systemId)]
+(extend-type File
+  Resource
+  (modified?
+    [this mtime]
+    {:pre [(.isFile this)]}
+    (> (.lastModified this) mtime))
+  (fetch
+    ([this]
+     {:pre [(.isFile this)]}
+     (let [reader (reader/get (Files/probeContentType (.toPath this)))
+           mtime (.lastModified this)]
+       (Source. reader (InputSource. (str this)) mtime)))
+    ([this mtime]
+     (if (modified? this mtime)
+       (fetch this)
+       nil))))
+
+(extend-type URL
+  Resource
+  (modified?
+    [this mtime]
+    (let [conn (.openConnection this)]
+      (.setRequestMethod conn "HEAD")
+      (.setIfModifiedSince conn mtime)
+      (case (.getResponseCode conn)
+        304 false
+        true)))
+  (fetch
+    ([this]
+     (fetch this nil))
+    ([this mtime]
+     (let [conn (.openConnection this)]
+       (if (not (nil? mtime))
+         (.setIfModifiedSince conn mtime))
+       (case (.getResponseCode conn)
+         304 nil
+         ;; TODO handle additional response codes
+         (let [ctype (.replaceFirst (.getContentType conn) ";.*" "")
+               reader (reader/get ctype)
+               ;; It's OK to do this. The stream will be closed by the
+               ;; reader as part of end-of-parse cleanup.
+               is (InputSource. (.getInputStream conn))
+               mtime (.getLastModified conn)]
+           (.setSystemId is (str this))
+           (Source. reader is mtime)))))))
+
+(defn- resolve
+  [systemId]
+  (let [url (.toURL (.resolve (.toURI (File. "")) systemId))]
     (case (.getProtocol url)
-      "file" (get-file-source (.getPath url) ltime)
-      (get-url-source url ltime))))
+      "file" (File. (.getPath url))
+      url)))
 
-(defn- with-infoset-cache 
-  "Cache source in memory as byte arrays of fastinfoset content"
-  [cache systemId]
-  (let [r (cache systemId)
-        ctime (if (nil? r) nil (:ctime r))
-        resource (get-source systemId ctime)]
-    (if (nil? resource)
-      cache
-      (let [{:keys [reader inputSource mtime]} resource
-            bos (ByteArrayOutputStream.)]
-        (.setContentHandler reader ((:constructor serialize/infoset) bos))
-        (.parse reader inputSource)
-        (info "Caching infoset copy of" systemId)
-        (assoc cache systemId (CachedSource. (.toByteArray bos) mtime))))))
+(defn- cache-resolve
+  [systemId]
+  (CachedResource.(resolve systemId)))
 
-(def ^{:private true} source-cache (atom {}))
+(extend-type String
+  Resource
+  (modified? [this mtime]
+    (modified? (cache-resolve this) mtime))
+  (fetch
+    ([this]
+     (fetch (cache-resolve this)))
+    ([this mtime]
+     (fetch (cache-resolve this) mtime))))
 
-(defn get
-  "Get the source identified by systemId"
-  [systemId & {:keys [cache] :or {cache true}}]
-  (if cache
-    (do
-      (swap! source-cache with-infoset-cache systemId)
-      (let [r (@source-cache systemId)
-            is (InputSource. (ByteArrayInputStream. (:data r)))]
-        (.setSystemId is systemId)
-        (Source. (reader/get "application/fastinfoset") is (:ctime r))))
-    (get-source systemId nil)))
+
+
+

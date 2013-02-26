@@ -7,10 +7,6 @@
 
 (def ^{:dynamic true} *cachedir* "cache")
 
-(defn get-url [path]
-  (let [cwd (.toURI (File. ""))]
-    (.toURL (.resolve cwd path))))
-
 (defn get-path 
   [path & paths]
   (Paths/get path (into-array String paths)))
@@ -28,9 +24,6 @@
                     (str (UUID/randomUUID)))]
       (.mkdirs (.toFile (.getParent p)))
       (.toFile p))))
-
-(defn get-content-type [path]
-  (Files/probeContentType path))
 
 (defn- rewrite-cache
   "An extra entry is added to the cache journal each time an entry is updated.

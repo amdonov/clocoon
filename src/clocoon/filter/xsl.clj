@@ -18,7 +18,7 @@
     (:xmlfilter this)))
 
 (defn- get-source [systemId]
-  (let [{:keys [reader inputSource mtime]} (source/get systemId)]
+  (let [{:keys [reader inputSource mtime]} (source/fetch systemId)]
     {:source (SAXSource. reader inputSource)
      :mtime mtime}))
 
@@ -44,8 +44,7 @@
                    (max (var-get ctime) (:mtime source)))))))
 
 (defn- cached-resource-valid? [ctime systemId]
-  (let [mtime (:mtime (source/get systemId))]
-    (<= mtime ctime)))
+  (not (source/modified? systemId ctime)))
 
 (defn- cached-template-valid? [template]
   (let [{:keys [ctime deps]} template]

@@ -19,12 +19,11 @@
     f))
 
 (defn- cached-resource-valid? [ctime systemId]
-  (let [mtime (:mtime (source/get systemId))]
-    (<= mtime ctime)))
+  (not (source/modified? systemId ctime)))
 
 (defn get-parser
   [systemId]
-  (let [{:keys [reader inputSource]} (source/get systemId)]
+  (let [{:keys [reader inputSource]} (source/fetch systemId)]
     (fn [contentHandler & filters]
       (let [reader (reduce wrap-reader reader filters)]
         (.setContentHandler reader contentHandler)
