@@ -16,12 +16,16 @@
 
 (defprotocol Resource
   (modified? [this mtime])
+  (cacheId [this])
+  (systemId [this])
   (fetch [this] [this mtime]))
 
 (defn- with-infoset-cache 
   "Cache source in memory as byte arrays of fastinfoset content"
-  [cache {:keys [systemId resource]}]
-  (let [r (cache systemId)
+  [cache resource]
+  (let [resource (:resource resource)
+        cId (cacheId resource)
+        r (cache cId)
         ctime (if (nil? r) nil (:ctime r))
         source (if (nil? ctime)
                  (fetch resource)
@@ -32,42 +36,43 @@
             bos (ByteArrayOutputStream.)]
         (.setContentHandler reader ((:constructor serialize/infoset) bos))
         (.parse reader inputSource)
-        (info "Caching infoset copy of" systemId)
-        (assoc cache systemId (CachedSource. (.toByteArray bos) mtime))))))
+        (info "Caching infoset copy of" (systemId resource))
+        (assoc cache cId (CachedSource. (.toByteArray bos) mtime))))))
 
 (def ^{:private true} source-cache (atom {}))
 
 (defrecord CachedResource
-  [systemId resource]
+  [resource]
   Resource
+  (cacheId [this] (cacheId (:resource this)))
+  (systemId [this] (systemId (:resource this)))
   (modified? 
     [this mtime]
     ; Check the underlining resource to see if
     ; it's modified. If it is then drop it from the cache
     (let [res (modified? (:resource this) mtime)]
       (if res
-        (do
-          (info "Flushing expired content from cache for" (:systemId this))
           (swap! source-cache (fn
                                 [cache systemId]
-                                (dissoc cache systemId)) (:systemId this))
-          ))
+                                (dissoc cache systemId)) (cacheId this)))
       res))
   (fetch [this]
     (fetch this nil))
   (fetch [this mtime]
     (swap! source-cache with-infoset-cache this)
-    (let [systemId (:systemId this)
-          r (@source-cache systemId)
+    (let [cacheId (cacheId this)
+          r (@source-cache cacheId)
           ctime (:ctime r)]
       (if (and (not (nil? mtime)) (<= ctime mtime))
         nil
         (let [is (InputSource. (ByteArrayInputStream. (:data r)))]
-          (.setSystemId is systemId)
+          (.setSystemId is (systemId this))
           (Source. (reader/get "application/fastinfoset") is ctime))))))
 
 (extend-type File
   Resource
+  (cacheId [this] (str this))
+  (systemId [this] (str this))
   (modified?
     [this mtime]
     {:pre [(.isFile this)]}
@@ -77,7 +82,7 @@
      {:pre [(.isFile this)]}
      (let [reader (reader/get (Files/probeContentType (.toPath this)))
            mtime (.lastModified this)]
-       (Source. reader (InputSource. (str this)) mtime)))
+       (Source. reader (InputSource. (systemId this)) mtime)))
     ([this mtime]
      (if (modified? this mtime)
        (fetch this)
@@ -85,6 +90,8 @@
 
 (extend-type URL
   Resource
+  (cacheId [this] (str this))
+  (systemId [this] (str this))
   (modified?
     [this mtime]
     (let [conn (.openConnection this)]
@@ -109,7 +116,7 @@
                ;; reader as part of end-of-parse cleanup.
                is (InputSource. (.getInputStream conn))
                mtime (.getLastModified conn)]
-           (.setSystemId is (str this))
+           (.setSystemId is (systemId this))
            (Source. reader is mtime)))))))
 
 (defn- resolve
@@ -121,10 +128,12 @@
 
 (defn- cache-resolve
   [systemId]
-  (CachedResource. systemId (resolve systemId)))
+  (CachedResource. (resolve systemId)))
 
 (extend-type String
   Resource
+  (cacheId [this] this)
+  (systemId [this] this)
   (modified? [this mtime]
     (modified? (cache-resolve this) mtime))
   (fetch

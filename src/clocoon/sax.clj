@@ -18,21 +18,18 @@
     (.setParent f reader)
     f))
 
-(defn- cached-resource-valid? [ctime systemId]
-  (not (source/modified? systemId ctime)))
-
 (defn get-parser
-  [systemId]
-  (let [{:keys [reader inputSource]} (source/fetch systemId)]
+  [resource]
+  (let [{:keys [reader inputSource]} (source/fetch resource)]
     (fn [contentHandler & filters]
       (let [reader (reduce wrap-reader reader filters)]
         (.setContentHandler reader contentHandler)
         (.parse reader inputSource)))))
 
-(defn- do-pipeline [systemId serializer-factory filters]
-  (let [parser (get-parser systemId)
+(defn- do-pipeline [resource serializer filters]
+  (let [parser (get-parser resource)
         file (io/make-cache-file)
-        serializer (:constructor serializer-factory) ]
+        serializer (:constructor serializer)]
     (with-open [os (BufferedOutputStream. (FileOutputStream. file))]
       (apply parser (serializer os) filters))
     file))
@@ -44,32 +41,32 @@
     (cache-valid? f ctime)
     true))
 
-(defn- cached-pipeline-valid? [ctime systemId filters]
+(defn- cached-pipeline-valid? [ctime resource filters]
   (and 
-    (cached-resource-valid? ctime systemId)
+    (not (source/modified? resource ctime))
     (every? (partial cached-filter-valid? ctime) filters)))
 
-(defn- get-pipeline-cache-id [systemId serializer-factory filters]
-  (str systemId (:cacheId serializer-factory) (reduce str (map :cacheId (filter (partial satisfies? CachedFilter) filters)))))
+(defn- get-pipeline-cache-id [resource serializer filters]
+  (str (source/cacheId resource) (:cacheId serializer) (reduce str (map :cacheId (filter (partial satisfies? CachedFilter) filters)))))
 
-(defn- with-pipeline-cache [cache systemId serializer-factory filters]
-  (let [cacheId (get-pipeline-cache-id systemId serializer-factory filters)]
+(defn- with-pipeline-cache [cache resource serializer filters]
+  (let [cacheId (get-pipeline-cache-id resource serializer filters)]
     (let [f (cache cacheId)]
       (if (or (nil? f)
               (not (.exists f))
               (not (cached-pipeline-valid? 
                      (.lastModified f) 
-                     systemId
+                     resource
                      filters)))
         (do 
           (if (not (nil? f))
             (.delete f))
-          (let [file (do-pipeline systemId serializer-factory filters)]
+          (let [file (do-pipeline resource serializer filters)]
             (.write io/journal (str cacheId "||" file "\n"))
             (.flush io/journal)
             (assoc cache cacheId file)))
         cache))))
 
-(defn pipeline [systemId serializer-factory & filters]
-  (swap! pipeline-cache with-pipeline-cache systemId serializer-factory filters)
-  (@pipeline-cache (get-pipeline-cache-id systemId serializer-factory filters)))
+(defn pipeline [resource serializer & filters]
+  (swap! pipeline-cache with-pipeline-cache resource serializer filters)
+  (@pipeline-cache (get-pipeline-cache-id resource serializer filters)))
