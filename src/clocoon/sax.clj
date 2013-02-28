@@ -1,7 +1,9 @@
 (ns clocoon.sax
   (:use [clojure.tools.logging :only (info error)]
+        [clocoon.core]
         [clocoon.filter.core])
-  (:require [clocoon.source :as source])
+  (:require [clocoon.source :as source]
+            [clocoon.serialize :as serialize])
   (:import (clocoon.source Source)
            (javax.xml.transform TransformerFactory URIResolver)
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
@@ -35,7 +37,7 @@
 
 (defn- rewrite-cache
   "An extra entry is added to the cache journal each time an entry is updated.
-  This leads to multiple lines for each cacheId. This function rebuilds the
+  This leads to multiple lines for each cache-id. This function rebuilds the
   cache journal to remove old entries."
   [cache]
   (info "Opening journal for rebuild")
@@ -91,30 +93,29 @@
 
 (defn- do-pipeline [resource serializer filters]
   (let [parser (get-parser resource)
-        file (make-cache-file)
-        serializer (:constructor serializer)]
+        file (make-cache-file)]
     (with-open [os (BufferedOutputStream. (FileOutputStream. file))]
-      (apply parser (serializer os) filters))
+      (apply parser (serialize/create serializer os) filters))
     file))
 
 (def ^{:private true} pipeline-cache (atom cache))
 
 (defn- cached-filter-valid? [ctime f]
-  (if (satisfies? CachedFilter f)
+  (if (satisfies? PCacheable f)
     (cache-valid? f ctime)
     true))
 
 (defn- cached-pipeline-valid? [ctime resource filters]
   (and 
-    (not (source/modified? resource ctime))
+    (cache-valid? resource ctime)
     (every? (partial cached-filter-valid? ctime) filters)))
 
 (defn- get-pipeline-cache-id [resource serializer filters]
-  (str (source/cacheId resource) (:cacheId serializer) (reduce str (map :cacheId (filter (partial satisfies? CachedFilter) filters)))))
+  (str (cache-id resource) (cache-id serializer) (reduce str (map cache-id (filter (partial satisfies? PCacheable) filters)))))
 
 (defn- with-pipeline-cache [cache resource serializer filters]
-  (let [cacheId (get-pipeline-cache-id resource serializer filters)]
-    (let [f (cache cacheId)]
+  (let [cache-id (get-pipeline-cache-id resource serializer filters)]
+    (let [f (cache cache-id)]
       (if (or (nil? f)
               (not (.exists f))
               (not (cached-pipeline-valid? 
@@ -125,9 +126,9 @@
           (if (not (nil? f))
             (.delete f))
           (let [file (do-pipeline resource serializer filters)]
-            (.write journal (str cacheId "||" file "\n"))
+            (.write journal (str cache-id "||" file "\n"))
             (.flush journal)
-            (assoc cache cacheId file)))
+            (assoc cache cache-id file)))
         cache))))
 
 (defn pipeline [resource serializer & filters]

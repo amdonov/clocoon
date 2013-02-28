@@ -1,6 +1,7 @@
 (ns clocoon.filter.xsl
   (:refer-clojure :exclude [filter])
   (:use [clojure.tools.logging :only (info error)]
+        [clocoon.core]
         [clocoon.filter.core])
   (:require [clocoon.source :as source])
   (:import (javax.xml.transform TransformerFactory URIResolver)
@@ -8,7 +9,7 @@
            (java.net URI)))
 
 (defrecord XSLFilter [xmlfilter mtime cacheId]
-  CachedFilter
+  PCacheable
   (cache-id [this]
     (:cacheId this))
   (cache-valid? [this ctime]
@@ -44,7 +45,7 @@
                    (max (var-get ctime) (:mtime source)))))))
 
 (defn- cached-resource-valid? [ctime systemId]
-  (not (source/modified? systemId ctime)))
+  (cache-valid? systemId ctime))
 
 (defn- cached-template-valid? [template]
   (let [{:keys [ctime deps]} template]

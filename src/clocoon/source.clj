@@ -1,12 +1,13 @@
 (ns clocoon.source
   (:refer-clojure :exclude [resolve])
-  (:use [clojure.tools.logging :only (info)])
+  (:use [clojure.tools.logging :only (info)]
+        [clocoon.core])
   (:require [clocoon.reader :as reader]
             [clocoon.serialize :as serialize])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream File)
            (java.net URL)
            (java.nio.file Files)
-           (org.xml.sax InputSource)))
+           (org.xml.sax InputSource XMLReader)))
 
 (defrecord Source
   [reader inputSource mtime])
@@ -15,8 +16,6 @@
   [data ctime])
 
 (defprotocol Resource
-  (modified? [this mtime])
-  (cacheId [this])
   (systemId [this])
   (fetch [this] [this mtime]))
 
@@ -24,7 +23,7 @@
   "Cache source in memory as byte arrays of fastinfoset content"
   [cache resource]
   (let [resource (:resource resource)
-        cId (cacheId resource)
+        cId (cache-id resource)
         r (cache cId)
         ctime (if (nil? r) nil (:ctime r))
         source (if (nil? ctime)
@@ -34,7 +33,7 @@
       cache
       (let [{:keys [reader inputSource mtime]} source
             bos (ByteArrayOutputStream.)]
-        (.setContentHandler reader ((:constructor serialize/infoset) bos))
+        (.setContentHandler reader (serialize/create serialize/infoset bos))
         (.parse reader inputSource)
         (info "Caching infoset copy of" (systemId resource))
         (assoc cache cId (CachedSource. (.toByteArray bos) mtime))))))
@@ -43,25 +42,26 @@
 
 (defrecord CachedResource
   [resource]
-  Resource
-  (cacheId [this] (cacheId (:resource this)))
-  (systemId [this] (systemId (:resource this)))
-  (modified? 
-    [this mtime]
+  PCacheable
+  (cache-id [this] (cache-id (:resource this)))
+  (cache-valid? 
+    [this ctime]
     ; Check the underlining resource to see if
     ; it's modified. If it is then drop it from the cache
-    (let [res (modified? (:resource this) mtime)]
-      (if res
+    (let [res (cache-valid? (:resource this) ctime)]
+      (if-not res
           (swap! source-cache (fn
-                                [cache systemId]
-                                (dissoc cache systemId)) (cacheId this)))
+                                [cache cache-id]
+                                (dissoc cache cache-id)) (cache-id this)))
       res))
+  Resource
+  (systemId [this] (systemId (:resource this)))
   (fetch [this]
     (fetch this nil))
   (fetch [this mtime]
     (swap! source-cache with-infoset-cache this)
-    (let [cacheId (cacheId this)
-          r (@source-cache cacheId)
+    (let [cache-id (cache-id this)
+          r (@source-cache cache-id)
           ctime (:ctime r)]
       (if (and (not (nil? mtime)) (<= ctime mtime))
         nil
@@ -70,13 +70,13 @@
           (Source. (reader/get "application/fastinfoset") is ctime))))))
 
 (extend-type File
-  Resource
-  (cacheId [this] (str this))
-  (systemId [this] (str this))
-  (modified?
-    [this mtime]
+  PCacheable
+  (cache-id [this] (str this))
+  (cache-valid? [this ctime]
     {:pre [(.isFile this)]}
-    (> (.lastModified this) mtime))
+    (<= (.lastModified this) ctime))
+  Resource
+  (systemId [this] (str this))
   (fetch
     ([this]
      {:pre [(.isFile this)]}
@@ -84,22 +84,23 @@
            mtime (.lastModified this)]
        (Source. reader (InputSource. (systemId this)) mtime)))
     ([this mtime]
-     (if (modified? this mtime)
+     (if-not (cache-valid? this mtime)
        (fetch this)
        nil))))
 
 (extend-type URL
+  PCacheable
+  (cache-id [this] (str this))
+  (cache-valid? [this ctime]
+    (let [conn (.openConnection this)]
+      (.setRequestMethod conn "HEAD")
+      (.setIfModifiedSince conn ctime)
+      (case (.getResponseCode conn)
+        304 true
+        false)))
   Resource
   (cacheId [this] (str this))
   (systemId [this] (str this))
-  (modified?
-    [this mtime]
-    (let [conn (.openConnection this)]
-      (.setRequestMethod conn "HEAD")
-      (.setIfModifiedSince conn mtime)
-      (case (.getResponseCode conn)
-        304 false
-        true)))
   (fetch
     ([this]
      (fetch this nil))
@@ -131,11 +132,12 @@
   (CachedResource. (resolve systemId)))
 
 (extend-type String
+  PCacheable
+  (cache-id [this] this)
+  (cache-valid? [this ctime]
+    (cache-valid? (resolve this) ctime))
   Resource
-  (cacheId [this] this)
   (systemId [this] this)
-  (modified? [this mtime]
-    (modified? (cache-resolve this) mtime))
   (fetch
     ([this]
      (fetch (cache-resolve this)))

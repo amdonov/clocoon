@@ -1,4 +1,5 @@
 (ns clocoon.serialize
+  (:use [clocoon.core])
   (:import (javax.xml.transform.sax SAXTransformerFactory)
            (javax.xml.transform.stream StreamResult)
            (javax.xml.transform.dom DOMResult)
@@ -6,7 +7,21 @@
            (org.xhtmlrenderer.pdf ITextRenderer)
            (com.sun.xml.fastinfoset.sax SAXDocumentSerializer)))
 
-(defrecord Serializer [constructor cacheId])
+(defprotocol PSerializer
+  (create [this os])
+  (content-type [this]))
+
+(defrecord Serializer [factory content-type cache-id]
+  PSerializer
+  (create [this os]
+    ((:factory this) os))
+  (content-type [this]
+    (:contentType this))
+  PCacheable
+  (cache-valid? [this ctime]
+    true)
+  (cache-id [this]
+    (:cache-id this)))
 
 (defn- create-stream-serializer
   "Get a ContentHandler for streaming SAX events as XML/HTML/text 
@@ -65,8 +80,12 @@
     (.setOutputStream serializer os)
     serializer))
 
-(def infoset (Serializer. create-infoset-serializer "fis"))
+(def infoset (Serializer. create-infoset-serializer 
+                          "application/fastinfoset" "fis"))
 
-(def pdf (Serializer. create-pdf-serializer "pdf"))
+(def pdf (Serializer. create-pdf-serializer 
+                      "application/pdf" "pdf"))
 
-(def stream (Serializer. create-stream-serializer ""))
+(def html (Serializer. create-stream-serializer "text/html" "html"))
+
+(def xml (Serializer. create-stream-serializer "text/xml" "xml"))

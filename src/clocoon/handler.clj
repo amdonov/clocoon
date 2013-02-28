@@ -11,10 +11,10 @@
 (def html-transform (xsl/filter "sample/sample.xsl"))
 
 (defn- basic-html [source f]
-  (sax/pipeline source serialize/stream (html-transform {"format" f})))
+  (sax/pipeline source serialize/html (html-transform {"format" f})))
 
 (defn- just-xml [source]
-  (sax/pipeline source serialize/stream))
+  (sax/pipeline source serialize/xml))
 
 (defn- basic-pdf [source f]
   (sax/pipeline source serialize/pdf (html-transform {"format" f})))
