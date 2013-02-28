@@ -1,9 +1,9 @@
 (ns clocoon.filter.core
   (:import (org.xml.sax XMLFilter)))
 
-(defprotocol Filter
+(defprotocol PFilter
   (get-filter [this]))
 
 (extend-type XMLFilter
-  Filter
+  PFilter
   (get-filter [this] this))

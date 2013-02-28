@@ -8,15 +8,15 @@
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
            (java.net URI)))
 
-(defrecord XSLFilter [xmlfilter mtime cacheId]
+(defrecord XSLFilter [xmlfilter mtime cid]
   PCacheable
   (cache-id [this]
-    (:cacheId this))
+    cid)
   (cache-valid? [this ctime]
     (> ctime mtime))
-  Filter
+  PFilter
   (get-filter [this]
-    (:xmlfilter this)))
+    xmlfilter))
 
 (defn- get-source [systemId]
   (let [{:keys [reader inputSource mtime]} (source/fetch systemId)]

@@ -15,7 +15,7 @@
 (defrecord CachedSource
   [data ctime])
 
-(defprotocol Resource
+(defprotocol PResource
   (systemId [this])
   (fetch [this] [this mtime]))
 
@@ -54,7 +54,7 @@
                                 [cache cache-id]
                                 (dissoc cache cache-id)) (cache-id this)))
       res))
-  Resource
+  PResource
   (systemId [this] (systemId (:resource this)))
   (fetch [this]
     (fetch this nil))
@@ -75,7 +75,7 @@
   (cache-valid? [this ctime]
     {:pre [(.isFile this)]}
     (<= (.lastModified this) ctime))
-  Resource
+  PResource
   (systemId [this] (str this))
   (fetch
     ([this]
@@ -98,7 +98,7 @@
       (case (.getResponseCode conn)
         304 true
         false)))
-  Resource
+  PResource
   (cacheId [this] (str this))
   (systemId [this] (str this))
   (fetch
@@ -136,7 +136,7 @@
   (cache-id [this] this)
   (cache-valid? [this ctime]
     (cache-valid? (resolve this) ctime))
-  Resource
+  PResource
   (systemId [this] this)
   (fetch
     ([this]
