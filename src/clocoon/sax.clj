@@ -133,4 +133,5 @@
 
 (defn pipeline [resource serializer & filters]
   (swap! pipeline-cache with-pipeline-cache resource serializer filters)
-  (@pipeline-cache (get-pipeline-cache-id resource serializer filters)))
+  {:body (@pipeline-cache (get-pipeline-cache-id resource serializer filters))
+   :headers {"Content-Type" (serialize/content-type serializer)}})

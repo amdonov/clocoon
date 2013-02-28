@@ -25,14 +25,11 @@
 (defroutes app-routes
            (GET "/" [] "Welcome")
            (GET "/product/:src.html"
-                [src format] {:body (basic-html (source src) format)
-                              :headers {"Content-Type" "text/html"}})
+                [src format] (basic-html (source src) format))
            (GET "/product/:src.xml"
-                [src] {:body (just-xml (source src))
-                              :headers {"Content-Type" "text/xml"}})
+                [src] (just-xml (source src)))
            (GET "/product/:src.pdf"
-                [src format] {:body (basic-pdf (source src) format)
-                              :headers {"Content-Type" "application/pdf"}})
+                [src format] (basic-pdf (source src) format))
            (route/not-found "Not Found"))
 
 (def app (handler/site (-> app-routes
