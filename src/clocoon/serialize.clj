@@ -11,17 +11,17 @@
   (create [this os])
   (content-type [this]))
 
-(defrecord Serializer [factory content-type cache-id]
+(defrecord Serializer [factory ctype cid]
   PSerializer
   (create [this os]
-    ((:factory this) os))
+    (factory os))
   (content-type [this]
-    (:contentType this))
+    ctype)
   PCacheable
   (cache-valid? [this ctime]
     true)
   (cache-id [this]
-    (:cache-id this)))
+    cid))
 
 (defn- create-stream-serializer
   "Get a ContentHandler for streaming SAX events as XML/HTML/text 
