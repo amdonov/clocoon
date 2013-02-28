@@ -63,21 +63,17 @@
   (swap! templates-cache with-templates-cache systemId)
   (@templates-cache systemId))
 
-(defn- get-xsl-filter [systemId params]
-  (let [templates (get-cached-templates systemId)]
-    (let [f (.. (SAXTransformerFactory/newInstance) 
-              (newXMLFilter (:obj templates)))
-          ctime (:ctime templates)]
-      (let [t (.getTransformer f)]
-        (if (> 0 (count params))
-          (apply (fn [k] (.setParameter t k (params k)))
-                 (keys params))))
-      (XSLFilter. f ctime (str systemId params)))))
-
 (defn filter [systemId]
-  (fn 
-    ([]
-     (get-xsl-filter systemId {}))
-    ([params]
-     (get-xsl-filter systemId params))))
+  (fn [& params]
+    (let [params (apply hash-map params)
+          templates (get-cached-templates systemId)]
+      (let [f (.. (SAXTransformerFactory/newInstance) 
+                (newXMLFilter (:obj templates)))
+            ctime (:ctime templates)]
+        (let [t (.getTransformer f)]
+          (if (not-empty params)
+            (apply (fn [k] 
+                     (.setParameter t k (params k)))
+                   (keys params))))
+        (XSLFilter. f ctime (str systemId params))))))
 
