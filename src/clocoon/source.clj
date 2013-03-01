@@ -7,7 +7,8 @@
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream File)
            (java.net URL)
            (java.nio.file Files)
-           (org.xml.sax InputSource XMLReader)))
+           (org.xml.sax InputSource XMLReader)
+           (org.xml.sax.ext LexicalHandler)))
 
 (defrecord Source
   [reader inputSource mtime])
@@ -32,8 +33,13 @@
     (if (nil? source)
       cache
       (let [{:keys [reader inputSource mtime]} source
-            bos (ByteArrayOutputStream.)]
-        (.setContentHandler reader (serialize/create serialize/infoset bos))
+            bos (ByteArrayOutputStream.)
+            handler (serialize/create serialize/infoset bos)]
+        (.setContentHandler reader handler)
+        (if (instance? LexicalHandler handler)
+            (.setProperty reader 
+                          "http://xml.org/sax/properties/lexical-handler"
+                          handler))
         (.parse reader inputSource)
         (info "Caching infoset copy of" (systemId resource))
         (assoc cache cId (CachedSource. (.toByteArray bos) mtime))))))
@@ -50,9 +56,9 @@
     ; it's modified. If it is then drop it from the cache
     (let [res (cache-valid? (:resource this) ctime)]
       (if-not res
-          (swap! source-cache (fn
-                                [cache cache-id]
-                                (dissoc cache cache-id)) (cache-id this)))
+        (swap! source-cache (fn
+                              [cache cache-id]
+                              (dissoc cache cache-id)) (cache-id this)))
       res))
   PResource
   (systemId [this] (systemId (:resource this)))

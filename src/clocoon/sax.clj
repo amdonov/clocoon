@@ -8,6 +8,7 @@
            (javax.xml.transform TransformerFactory URIResolver)
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
            (org.xml.sax InputSource)
+           (org.xml.sax.ext LexicalHandler)
            (java.io File ByteArrayInputStream BufferedOutputStream
                     FileOutputStream ByteArrayOutputStream)
            (java.net URI)
@@ -86,9 +87,12 @@
 (defn get-parser
   [resource]
   (let [{:keys [reader inputSource]} (source/fetch resource)]
-    (fn [contentHandler & filters]
+    (fn [handler & filters]
       (let [reader (reduce wrap-reader reader filters)]
-        (.setContentHandler reader contentHandler)
+        (.setContentHandler reader handler)
+        (if (instance? LexicalHandler handler)
+          (.setProperty reader "http://xml.org/sax/properties/lexical-handler"
+                        handler))
         (.parse reader inputSource)))))
 
 (defn- do-pipeline [resource serializer filters]
