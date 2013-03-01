@@ -14,7 +14,7 @@
   (sax/pipeline source serialize/html (html-transform)))
 
 (defn- just-xml [source]
-  (sax/pipeline source serialize/xml))
+  (sax/pipeline source serialize/xml (clocoon.filter.BaseFilter.)))
 
 (defn- basic-pdf [source f]
   (sax/pipeline source serialize/pdf (html-transform "format" f)))

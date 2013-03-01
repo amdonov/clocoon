@@ -10,5 +10,6 @@
                            [com.sun.xml.fastinfoset/FastInfoset "1.2.12"]]
             :plugins [[lein-ring "0.8.2"]]
             :ring {:handler clocoon.handler/app}
+            :aot [clocoon.filter.BaseFilter]
             :profiles
             {:dev {:dependencies [[ring-mock "0.1.3"]]}})

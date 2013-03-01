@@ -1,4 +1,4 @@
-(ns clocoon.filter.XMLConsumer
+(ns clocoon.filter.BaseFilter
   (:import (org.xml.sax InputSource)) 
   (:gen-class
     :main false
@@ -24,29 +24,28 @@
 (defn pass-event [this f & args]
   (let [handler (get-field this :lexHandler)]
     (if (not (nil? handler))
-      (apply f this args))))
+      (apply f handler args))))
 
-(defn -comment [ch start length]
-  (pass-event (fn [h c s l] (.comment h c s l)) ch start length))
+(defn -comment [this ch start length]
+  (pass-event #(.comment %1 %2 %3 %4)))
 
 (defn -endCDATA [this]
-  (println "Called")
-  (pass-event this (fn [h] (.endCDATA h))))
+  (pass-event this #(.endCDATA %)))
 
 (defn -endDTD [this]
-  (pass-event this (fn [h] (.endDTD h))))
+  (pass-event this #(.endDTD %)))
 
 (defn -endEntity [this name]
-  (pass-event this (fn [h] (.endEntity h))))
+  (pass-event this #(.endEntity %)))
 
 (defn -startCDATA [this]
-  (pass-event this (fn [h] (.startCDATA h))))
+  (pass-event this #(.startCDATA %)))
 
 (defn -startDTD [this name publicId systemId]
-  (pass-event this (fn [h n p s] (.startDTD h n p s)) name publicId systemId))
+  (pass-event this #(.startDTD %1 %2 %3 %4) name publicId systemId))
 
 (defn -startEntity [this name]
-  (pass-event this (fn [h n] (.startEntity h n)) name))
+  (pass-event this #(.startEntity %1 %2) name))
 
 (defn -parse [this ^InputSource input]
   (let [parent (.getParent this)]
