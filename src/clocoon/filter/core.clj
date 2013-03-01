@@ -7,3 +7,4 @@
 (extend-type XMLFilter
   PFilter
   (get-filter [this] this))
+
