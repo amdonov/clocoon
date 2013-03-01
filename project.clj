@@ -3,13 +3,9 @@
             :url "http://github.com/amdonov/clocoon"
             :javac-target "1.7"
             :dependencies [[org.clojure/clojure "1.4.0"]
-                           [compojure "1.1.5"]
+                           [ring/ring-core "1.1.8"]
                            [org.clojure/tools.logging "0.2.6"]
                            [net.sourceforge.nekohtml/nekohtml "1.9.17"]
                            [org.xhtmlrenderer/flying-saucer-pdf "9.0.1"]
                            [com.sun.xml.fastinfoset/FastInfoset "1.2.12"]]
-            :plugins [[lein-ring "0.8.2"]]
-            :ring {:handler clocoon.handler/app}
-            :aot [clocoon.filter.BaseFilter]
-            :profiles
-            {:dev {:dependencies [[ring-mock "0.1.3"]]}})
+            :aot [clocoon.filter.BaseFilter])
