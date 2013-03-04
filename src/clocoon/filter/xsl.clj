@@ -19,7 +19,10 @@
     xmlfilter))
 
 (defn- get-source [systemId]
-  (let [{:keys [reader inputSource mtime]} (source/fetch systemId)]
+  (let [res (source/fetch systemId)
+        reader (source/reader res)
+        inputSource (source/input-source res)
+        mtime (source/last-modified res)]
     {:source (SAXSource. reader inputSource)
      :mtime mtime}))
 

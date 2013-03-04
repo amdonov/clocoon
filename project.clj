@@ -10,5 +10,5 @@
                            [net.sourceforge.nekohtml/nekohtml "1.9.17"]
                            [org.xhtmlrenderer/flying-saucer-pdf "9.0.1"]
                            [com.sun.xml.fastinfoset/FastInfoset "1.2.12"]]
-            :aot [clocoon.filter.BaseFilter])
+            :aot [clocoon.filter.BaseFilter clocoon.interop])
 

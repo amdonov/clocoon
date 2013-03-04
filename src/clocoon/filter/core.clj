@@ -8,3 +8,8 @@
   PFilter
   (get-filter [this] this))
 
+(extend-type clocoon.IFilter
+     PFilter
+     (get-filter [this]
+           (.getFilter this)))
+

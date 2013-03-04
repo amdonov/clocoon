@@ -5,11 +5,19 @@
            (javax.xml.transform.dom DOMResult)
            (org.xml.sax ContentHandler)
            (org.xhtmlrenderer.pdf ITextRenderer)
+           (clocoon ISerializer)
            (com.sun.xml.fastinfoset.sax SAXDocumentSerializer)))
 
 (defprotocol PSerializer
   (create [this os])
   (content-type [this]))
+
+(extend-type ISerializer
+    PSerializer
+    (create [this os]
+          (.create this os))
+    (content-type [this]
+          (.getContentType this)))
 
 (defrecord Serializer [factory ctype cid]
   PSerializer

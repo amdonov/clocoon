@@ -10,14 +10,43 @@
            (org.xml.sax InputSource XMLReader)
            (org.xml.sax.ext LexicalHandler)))
 
+(defprotocol PSource
+  (reader [this])
+  (input-source [this])
+  (last-modified [this]))
+
+
 (defrecord Source
-  [reader inputSource mtime])
+  [r is mtime]
+  PSource
+  (reader [this]
+    r)
+  (input-source [this]
+    is)
+  (last-modified [this]
+    mtime))
 
 (defrecord CachedSource
   [data systemId ctime])
 
 (defprotocol PResource
   (fetch [this] [this mtime]))
+
+(extend-type clocoon.ISource
+    PSource
+    (reader [this]
+          (.getReader this))
+    (input-source [this]
+          (.getInputSource this))
+    (last-modified [this]
+       (.getLastModified this)))
+
+(extend-type clocoon.IResource
+    PResource
+    (fetch [this]
+          (.fetch this))
+    (fetch [this mtime]
+          (.fetch this mtime)))
 
 (defn- with-infoset-cache 
   "Cache source in memory as byte arrays of fastinfoset content"

@@ -86,7 +86,9 @@
 
 (defn get-parser
   [resource]
-  (let [{:keys [reader inputSource]} (source/fetch resource)]
+  (let [res (source/fetch resource)
+        reader (source/reader res)
+        inputSource (source/input-source res)]
     (fn [handler & filters]
       (let [reader (reduce wrap-reader reader filters)]
         (.setContentHandler reader handler)
