@@ -65,17 +65,17 @@
           cache))
       {})))
 
-(def cache (build-cache))
-
-(def journal (do 
-               (info "Opening journal for logging")
-               (.mkdirs (File. *cachedir*))
-               (Files/newBufferedWriter
-                 (get-path *cachedir* "journal")
-                 (Charset/defaultCharset)
-                 (into-array StandardOpenOption
-                             (list StandardOpenOption/APPEND 
-                                   StandardOpenOption/CREATE)))))
+(defn init []
+  (def ^{:private true} pipeline-cache (atom (build-cache)))
+  (def journal (do 
+                 (info "Opening journal for logging")
+                 (.mkdirs (File. *cachedir*))
+                 (Files/newBufferedWriter
+                   (get-path *cachedir* "journal")
+                   (Charset/defaultCharset)
+                   (into-array StandardOpenOption
+                               (list StandardOpenOption/APPEND 
+                                     StandardOpenOption/CREATE))))))
 
 (defn- wrap-reader 
   "Wrap an XMLReader with an XMLFilter"
@@ -102,8 +102,6 @@
       (apply parser (serialize/create serializer os) filters))
     file))
 
-(def ^{:private true} pipeline-cache (atom cache))
-
 (defn- cached-filter-valid? [ctime f]
   (if (satisfies? PCacheable f)
     (cache-valid? f ctime)
@@ -118,24 +116,25 @@
   (str (cache-id resource) (cache-id serializer) (reduce str (map cache-id (filter (partial satisfies? PCacheable) filters)))))
 
 (defn- with-pipeline-cache [cache resource serializer filters]
-  (let [cache-id (get-pipeline-cache-id resource serializer filters)]
-    (let [f (cache cache-id)]
-      (if (or (nil? f)
-              (not (.exists f))
-              (not (cached-pipeline-valid? 
-                     (.lastModified f) 
-                     resource
-                     filters)))
-        (do 
-          (if (not (nil? f))
-            (.delete f))
-          (let [file (do-pipeline resource serializer filters)]
-            (.write journal (str cache-id "||" file "\n"))
-            (.flush journal)
-            (assoc cache cache-id file)))
-        cache))))
+  (let [cache-id (get-pipeline-cache-id resource serializer filters)
+        f (cache cache-id)]
+    (if (or (nil? f)
+            (not (.exists f))
+            (not (cached-pipeline-valid? 
+                   (.lastModified f) 
+                   resource
+                   filters)))
+      (do 
+        (if (not (nil? f))
+          (.delete f))
+        (let [file (do-pipeline resource serializer filters)]
+          (.write journal (str cache-id "||" file "\n"))
+          (.flush journal)
+          (assoc cache cache-id file)))
+      cache)))
 
-(defn pipeline [resource serializer & filters]
-  (swap! pipeline-cache with-pipeline-cache resource serializer filters)
-  {:body (@pipeline-cache (get-pipeline-cache-id resource serializer filters))
+(defn pipeline [resource serializer & opts+filters]
+  (swap! pipeline-cache with-pipeline-cache resource serializer opts+filters)
+  {:body (@pipeline-cache (get-pipeline-cache-id resource 
+                                                 serializer opts+filters))
    :headers {"Content-Type" (serialize/content-type serializer)}})
