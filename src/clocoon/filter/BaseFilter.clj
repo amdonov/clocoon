@@ -27,7 +27,7 @@
       (apply f handler args))))
 
 (defn -comment [this ch start length]
-  (pass-event #(.comment %1 %2 %3 %4)))
+  (pass-event this #(.comment %1 %2 %3 %4) ch start length))
 
 (defn -endCDATA [this]
   (pass-event this #(.endCDATA %)))
