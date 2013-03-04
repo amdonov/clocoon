@@ -14,10 +14,9 @@
   [reader inputSource mtime])
 
 (defrecord CachedSource
-  [data ctime])
+  [data systemId ctime])
 
 (defprotocol PResource
-  (systemId [this])
   (fetch [this] [this mtime]))
 
 (defn- with-infoset-cache 
@@ -34,15 +33,16 @@
       cache
       (let [{:keys [reader inputSource mtime]} source
             bos (ByteArrayOutputStream.)
-            handler (serialize/create serialize/infoset bos)]
+            handler (serialize/create serialize/infoset bos)
+            systemId (.getSystemId inputSource)]
         (.setContentHandler reader handler)
         (if (instance? LexicalHandler handler)
             (.setProperty reader 
                           "http://xml.org/sax/properties/lexical-handler"
                           handler))
         (.parse reader inputSource)
-        (info "Caching infoset copy of" (systemId resource))
-        (assoc cache cId (CachedSource. (.toByteArray bos) mtime))))))
+        (info "Caching infoset copy of" systemId)
+        (assoc cache cId (CachedSource. (.toByteArray bos) systemId mtime))))))
 
 (def ^{:private true} source-cache (atom {}))
 
@@ -61,7 +61,6 @@
                               (dissoc cache cache-id)) (cache-id this)))
       res))
   PResource
-  (systemId [this] (systemId (:resource this)))
   (fetch [this]
     (fetch this nil))
   (fetch [this mtime]
@@ -72,7 +71,7 @@
       (if (and (not (nil? mtime)) (<= ctime mtime))
         nil
         (let [is (InputSource. (ByteArrayInputStream. (:data r)))]
-          (.setSystemId is (systemId this))
+          (.setSystemId is (:systemId r))
           (Source. (reader/get "application/fastinfoset") is ctime))))))
 
 (extend-type File
@@ -82,13 +81,12 @@
     {:pre [(.isFile this)]}
     (<= (.lastModified this) ctime))
   PResource
-  (systemId [this] (str this))
   (fetch
     ([this]
      {:pre [(.isFile this)]}
      (let [reader (reader/get (Files/probeContentType (.toPath this)))
            mtime (.lastModified this)]
-       (Source. reader (InputSource. (systemId this)) mtime)))
+       (Source. reader (InputSource. (str this)) mtime)))
     ([this mtime]
      (if-not (cache-valid? this mtime)
        (fetch this)
@@ -106,7 +104,6 @@
         false)))
   PResource
   (cacheId [this] (str this))
-  (systemId [this] (str this))
   (fetch
     ([this]
      (fetch this nil))
@@ -123,7 +120,7 @@
                ;; reader as part of end-of-parse cleanup.
                is (InputSource. (.getInputStream conn))
                mtime (.getLastModified conn)]
-           (.setSystemId is (systemId this))
+           (.setSystemId is (str this))
            (Source. reader is mtime)))))))
 
 (defn- resolve
@@ -133,19 +130,14 @@
       "file" (File. (.getPath url))
       url)))
 
-(defn- cache-resolve
-  [systemId]
-  (CachedResource. (resolve systemId)))
-
 (extend-type String
   PCacheable
   (cache-id [this] this)
   (cache-valid? [this ctime]
     (cache-valid? (resolve this) ctime))
   PResource
-  (systemId [this] this)
   (fetch
     ([this]
-     (fetch (cache-resolve this)))
+     (fetch (resolve this)))
     ([this mtime]
-     (fetch (cache-resolve this) mtime))))
+     (fetch (resolve this) mtime))))
