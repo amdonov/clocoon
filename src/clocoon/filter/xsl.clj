@@ -78,6 +78,6 @@
         (if (not-empty params)
           (apply (fn [k] 
                    (.setParameter t k (params k)))
-                 (keys params))))
-      (XSLFilter. f ctime (str systemId params)))))
+                 (keys params)))
+        (XSLFilter. f ctime (str systemId params))))))
 
