@@ -9,15 +9,16 @@
            (com.sun.xml.fastinfoset.sax SAXDocumentSerializer)))
 
 (defprotocol PSerializer
-  (handler [this os])
-  (content-type [this]))
+  "The final consumer for SAX events"
+  (handler [this os] "The ContentHandler for SAX events. May also implement extra interfaces such as  LexicalHandler.")
+  (content-type [this] "The content-type/mime-type for this Serializer"))
 
 (extend-type ISerializer
-    PSerializer
-    (handler [this os]
-          (.handler this os))
-    (content-type [this]
-          (.getContentType this)))
+  PSerializer
+  (handler [this os]
+    (.handler this os))
+  (content-type [this]
+    (.getContentType this)))
 
 (defrecord Serializer [factory ctype cid]
   PSerializer

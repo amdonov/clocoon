@@ -73,11 +73,11 @@
           templates (get-cached-templates systemId)]
       (let [f (.. (SAXTransformerFactory/newInstance) 
                 (newXMLFilter (:obj templates)))
-            ctime (:ctime templates)]
-        (let [t (.getTransformer f)]
-          (if (not-empty params)
-            (apply (fn [k] 
-                     (.setParameter t k (params k)))
-                   (keys params))))
-        (XSLFilter. f ctime (str systemId params))))))
+            ctime (:ctime templates)
+            t (.getTransformer f)]
+        (if (not-empty params)
+          (apply (fn [k] 
+                   (.setParameter t k (params k)))
+                 (keys params))))
+      (XSLFilter. f ctime (str systemId params)))))
 

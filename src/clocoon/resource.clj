@@ -10,7 +10,8 @@
            (org.xml.sax InputSource)))
 
 (defprotocol PResource
-  (fetch [this] [this mtime]))
+  "A reference to a PSource. Could be a String, File, URL, or something else. This is the start of pipeline to avoid the overhead of creating a PSource in the eent that a pipeline is cached and need not be rerun."
+  (fetch [this] [this mtime] "Return the PSource associated with this PResource or nil if it hasn't been modified since mtime"))
 
 (extend-protocol PResource
   clocoon.IResource
