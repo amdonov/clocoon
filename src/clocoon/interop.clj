@@ -22,6 +22,6 @@
 
 (gen-interface
   :name clocoon.ISerializer
-  :methods [[create [java.io.OutputStream] org.xml.sax.ContentHandler]
+  :methods [[handler [java.io.OutputStream] org.xml.sax.ContentHandler]
             [getContentType [] String]])
 

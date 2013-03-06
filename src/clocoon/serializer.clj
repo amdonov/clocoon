@@ -1,5 +1,5 @@
-(ns clocoon.serialize
-  (:use [clocoon.core])
+(ns clocoon.serializer
+  (:use [clocoon.cache.core])
   (:import (javax.xml.transform.sax SAXTransformerFactory)
            (javax.xml.transform.stream StreamResult)
            (javax.xml.transform.dom DOMResult)
@@ -9,19 +9,19 @@
            (com.sun.xml.fastinfoset.sax SAXDocumentSerializer)))
 
 (defprotocol PSerializer
-  (create [this os])
+  (handler [this os])
   (content-type [this]))
 
 (extend-type ISerializer
     PSerializer
-    (create [this os]
-          (.create this os))
+    (handler [this os]
+          (.handler this os))
     (content-type [this]
           (.getContentType this)))
 
 (defrecord Serializer [factory ctype cid]
   PSerializer
-  (create [this os]
+  (handler [this os]
     (factory os))
   (content-type [this]
     ctype)

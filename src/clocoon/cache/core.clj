@@ -1,4 +1,4 @@
-(ns clocoon.core)
+(ns clocoon.cache.core)
 
 (defprotocol PCacheable
   (cache-valid? [this ctime])

@@ -1,24 +1,23 @@
 (ns clocoon.sax
-  (:use [clojure.tools.logging :only (info error)]
-        [clocoon.core]
-        [clocoon.filter.core])
   (:require [clocoon.source :as source]
-            [clocoon.serialize :as serialize])
+            [clocoon.resource :as resource]
+            [clocoon.serializer :as serializer]
+            [clocoon.filter.core :as filter])
   (:import (org.xml.sax.ext LexicalHandler)
            (java.io ByteArrayInputStream ByteArrayOutputStream)))
 
 (defn- wrap-reader 
   "Wrap an XMLReader with an XMLFilter"
   [reader xmlfilter]
-  (let [f (get-filter xmlfilter)]
+  (let [f (filter/get-filter xmlfilter)]
     (.setParent f reader)
     f))
 
-(defn get-parser
+(defn- get-parser
   [resource]
-  (let [res (source/fetch resource)
-        reader (source/reader res)
-        inputSource (source/input-source res)]
+  (let [s (resource/fetch resource)
+        reader (source/reader s)
+        inputSource (source/input-source s)]
     (fn [handler & filters]
       (let [reader (reduce wrap-reader reader filters)]
         (.setContentHandler reader handler)
@@ -27,12 +26,12 @@
                         handler))
         (.parse reader inputSource)))))
 
-(defn do-pipeline [resource serializer filters]
+(defn do-pipeline [resource handler filters]
   (let [parser (get-parser resource)]
-    (apply parser serializer filters)))
+    (apply parser handler filters)))
 
 (defn pipeline [resource serializer & filters]
   (let [os (ByteArrayOutputStream.)]
-    (do-pipeline resource (serialize/create serializer os) filters)
+    (do-pipeline resource (serializer/handler serializer os) filters)
     {:body (ByteArrayInputStream. (.toByteArray os))
-     :headers {"Content-Type" (serialize/content-type serializer)}}))
+     :headers {"Content-Type" (serializer/content-type serializer)}}))

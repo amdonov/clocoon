@@ -1,9 +1,10 @@
 (ns clocoon.filter.xsl
   (:refer-clojure :exclude [filter])
   (:use [clojure.tools.logging :only (info error)]
-        [clocoon.core]
+        [clocoon.cache.core]
         [clocoon.filter.core])
-  (:require [clocoon.source :as source])
+  (:require [clocoon.source :as source]
+            [clocoon.resource :as resource])
   (:import (javax.xml.transform TransformerFactory URIResolver)
            (javax.xml.transform.sax SAXSource SAXTransformerFactory)
            (java.net URI)))
@@ -19,7 +20,7 @@
     xmlfilter))
 
 (defn- get-source [systemId]
-  (let [res (source/fetch systemId)
+  (let [res (resource/fetch systemId)
         reader (source/reader res)
         inputSource (source/input-source res)
         mtime (source/last-modified res)]

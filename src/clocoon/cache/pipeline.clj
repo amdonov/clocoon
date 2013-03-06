@@ -1,9 +1,10 @@
-(ns clocoon.cache
+(ns clocoon.cache.pipeline
   (:use [clojure.tools.logging :only (info error)]
-        [clocoon.core]
+        [clocoon.cache.core]
         [clocoon.filter.core])
-  (:require [clocoon.serialize :as serialize]
-            [clocoon.sax :as sax])
+  (:require [clocoon.serializer :as serializer]
+            [clocoon.sax :as sax]
+            [clocoon.cache.resource])
   (:import 
     (java.io File BufferedOutputStream FileOutputStream)
     (java.nio.file Files Paths StandardOpenOption)
@@ -96,7 +97,7 @@
           (.delete f))
         (let [file (make-cache-file)]
           (with-open [os (BufferedOutputStream. (FileOutputStream. file))]
-            (sax/do-pipeline resource (serialize/create serializer os) filters))
+            (sax/do-pipeline resource (serializer/handler serializer os) filters))
           (.write journal (str cache-id "||" file "\n"))
           (.flush journal)
           (assoc cache cache-id file)))
@@ -110,7 +111,7 @@
     (swap! pipeline-cache with-pipeline-cache resource serializer filters)
     {:body (@pipeline-cache (get-pipeline-cache-id resource 
                                                    serializer filters))
-     :headers {"Content-Type" (serialize/content-type serializer)}}))
+     :headers {"Content-Type" (serializer/content-type serializer)}}))
 
 (defn use-file-cache []
   (def ^{:private true} pipeline-cache (atom (build-cache)))
